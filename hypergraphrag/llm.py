@@ -10,7 +10,6 @@ import aioboto3
 import aiohttp
 import numpy as np
 import ollama
-import torch
 from openai import (
     AsyncOpenAI,
     APIConnectionError,
@@ -994,6 +993,7 @@ async def bedrock_embedding(
 
 
 async def hf_embedding(texts: list[str], tokenizer, embed_model) -> np.ndarray:
+    import torch
     device = next(embed_model.parameters()).device
     input_ids = tokenizer(
         texts, return_tensors="pt", padding=True, truncation=True
