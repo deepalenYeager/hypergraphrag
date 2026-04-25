@@ -16,18 +16,17 @@ paths:
   working_dir: ./expr/batch
 
 # ---------------------------------------------------------------------------
-# vLLM server
-# Both the LLM and the embedding model are expected to be served by the same
-# vLLM instance via its OpenAI-compatible REST API.
-# ---------------------------------------------------------------------------
-vllm:
-  base_url: http://localhost:8000/v1
-
-# ---------------------------------------------------------------------------
 # Language model
 # ---------------------------------------------------------------------------
 llm:
-  # Exact model name as registered by the running vLLM server.
+  # OpenAI-compatible REST API endpoint for the LLM server.
+  base_url: http://localhost:8000/v1
+
+  # API key sent in the Authorization header.
+  # Any non-empty value is accepted by most local inference servers.
+  api_key: "EMPTY"
+
+  # Exact model name as registered by the running server.
   # Example: Qwen/Qwen2.5-7B-Instruct
   model: ""
 
@@ -41,7 +40,14 @@ llm:
 # Embedding model
 # ---------------------------------------------------------------------------
 embedding:
-  # Exact model name as registered by the running vLLM server.
+  # OpenAI-compatible REST API endpoint for the embedding server.
+  # May differ from llm.base_url if the models run on separate hosts/ports.
+  base_url: http://localhost:8000/v1
+
+  # API key sent in the Authorization header.
+  api_key: "EMPTY"
+
+  # Exact model name as registered by the running server.
   # Example: BAAI/bge-m3
   model: ""
 
