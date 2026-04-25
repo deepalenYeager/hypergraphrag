@@ -2,349 +2,301 @@ GRAPH_FIELD_SEP = "<SEP>"
 
 PROMPTS = {}
 
-PROMPTS["DEFAULT_LANGUAGE"] = "English"
+PROMPTS["DEFAULT_LANGUAGE"] = "中文"
 PROMPTS["DEFAULT_TUPLE_DELIMITER"] = "<|>"
 PROMPTS["DEFAULT_RECORD_DELIMITER"] = "##"
 PROMPTS["DEFAULT_COMPLETION_DELIMITER"] = "<|COMPLETE|>"
 PROMPTS["process_tickers"] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
-PROMPTS["DEFAULT_ENTITY_TYPES"] = ["organization", "person", "geo", "event", "category"]
+PROMPTS["DEFAULT_ENTITY_TYPES"] = ["组织", "人物", "地点", "事件", "类别"]
 
-PROMPTS["entity_extraction"] = """-Goal-
-Given a text document that is potentially relevant to this activity and a list of entity types, identify all entities of those types from the text and all relationships among the identified entities.
-Use {language} as output language.
+PROMPTS["entity_extraction"] = """-目标-
+给定一段可能与当前任务相关的文本文档，以及一组实体类型，请从文本中识别这些类型的全部实体，并识别已识别实体之间的全部关系。
+请使用 {language} 作为输出语言。
 
--Steps-
-1. Divide the text into several complete knowledge segments.  For each knowledge segment, extract the following information:
--- knowledge_segment: A sentence that describes the context of the knowledge segment.
--- completeness_score: A score from 0 to 10 indicating the completeness of the knowledge segment.
-Format each knowledge segment as ("hyper-relation"{tuple_delimiter}<knowledge_segment>{tuple_delimiter}<completeness_score>)
+-步骤-
+1. 将文本划分为若干完整的知识片段。对每个知识片段，抽取以下信息：
+-- knowledge_segment：一句描述该知识片段上下文的句子。
+-- completeness_score：0 到 10 的分数，表示该知识片段的完整程度。
+每个知识片段按如下格式输出：("hyper-relation"{tuple_delimiter}<knowledge_segment>{tuple_delimiter}<completeness_score>)
 
-2. Identify all entities in each knowledge segment. For each identified entity, extract the following information:
-- entity_name: Name of the entity, use same language as input text. If English, capitalized the name.
-- entity_type: Type of the entity.
-- entity_description: Comprehensive description of the entity's attributes and activities.
-- key_score: A score from 0 to 100 indicating the importance of the entity in the text.
-Format each entity as ("entity"{tuple_delimiter}<entity_name>{tuple_delimiter}<entity_type>{tuple_delimiter}<entity_description>{tuple_delimiter}<key_score>)
+2. 识别每个知识片段中的全部实体。对每个已识别实体，抽取以下信息：
+- entity_name：实体名称，使用与输入文本相同的语言；如果输入为英文，请保留英文实体原名并按常规大写。
+- entity_type：实体类型。
+- entity_description：对该实体属性和活动的全面描述。
+- key_score：0 到 100 的分数，表示该实体在文本中的重要性。
+每个实体按如下格式输出：("entity"{tuple_delimiter}<entity_name>{tuple_delimiter}<entity_type>{tuple_delimiter}<entity_description>{tuple_delimiter}<key_score>)
 
-3. Return output in {language} as a single list of all the entities and relationships identified in steps 1 and 2. Use **{record_delimiter}** as the list delimiter.
+3. 将步骤 1 和步骤 2 识别出的全部实体和关系作为单个列表返回，输出语言为 {language}。使用 **{record_delimiter}** 作为列表分隔符。
 
-4. When finished, output {completion_delimiter}
+4. 完成后，输出 {completion_delimiter}
 
 ######################
--Examples-
+-示例-
 ######################
 {examples}
 
 #############################
--Real Data-
+-真实数据-
 ######################
-Text: {input_text}
+文本：{input_text}
 ######################
-Output:
+输出：
 """
 
 PROMPTS["entity_extraction_examples"] = [
-    """Example 1:
+    """示例 1：
 
-Text:
-while Alex clenched his jaw, the buzz of frustration dull against the backdrop of Taylor's authoritarian certainty. It was this competitive undercurrent that kept him alert, the sense that his and Jordan's shared commitment to discovery was an unspoken rebellion against Cruz's narrowing vision of control and order. Then Taylor did something unexpected. They paused beside Jordan and, for a moment, observed the device with something akin to reverence. “If this tech can be understood..." Taylor said, their voice quieter, "It could change the game for us. For all of us.” The underlying dismissal earlier seemed to falter, replaced by a glimpse of reluctant respect for the gravity of what lay in their hands. Jordan looked up, and for a fleeting heartbeat, their eyes locked with Taylor's, a wordless clash of wills softening into an uneasy truce. It was a small transformation, barely perceptible, but one that Alex noted with an inward nod. They had all been brought here by different paths
+文本：
+在项目评审会上，张伟代表星河科技介绍了面向电力巡检的智能识别系统。该系统由研发部和华东电网联合测试，能够识别杆塔缺陷、鸟巢隐患和通道异物。李娜指出，系统在雨雾天气下的准确率仍需提升，因此建议下一阶段增加山区线路样本，并由运维中心负责数据标注。
 ################
-Output:
-("hyper-relation"{tuple_delimiter}"Alex clenched his jaw, the buzz of frustration dull against the backdrop of Taylor’s authoritarian certainty."{tuple_delimiter}7){record_delimiter}
-("entity"{tuple_delimiter}"Alex"{tuple_delimiter}"person"{tuple_delimiter}"Alex is a person who clenched his jaw, showing frustration against Taylor's authoritarian certainty."{tuple_delimiter}95){record_delimiter}
-("entity"{tuple_delimiter}"Taylor"{tuple_delimiter}"person"{tuple_delimiter}"Taylor is a person who has an authoritarian certainty."{tuple_delimiter}90){record_delimiter}
-("hyper-relation"{tuple_delimiter}"It was this competitive undercurrent that kept him alert, the sense that his and Jordan’s shared commitment to discovery was an unspoken rebellion against Cruz’s narrowing vision of control and order."{tuple_delimiter}9){record_delimiter}
-("entity"{tuple_delimiter}"Alex"{tuple_delimiter}"person"{tuple_delimiter}"Alex is a person who has a competitive undercurrent that keeps him alert."{tuple_delimiter}95){record_delimiter}
-("entity"{tuple_delimiter}"Jordan"{tuple_delimiter}"person"{tuple_delimiter}"Jordan is a person who has a shared commitment to discovery."{tuple_delimiter}90){record_delimiter}
-("entity"{tuple_delimiter}"Cruz"{tuple_delimiter}"person"{tuple_delimiter}"Cruz is a person who has a narrowing vision of control and order."{tuple_delimiter}85){record_delimiter}
-("hyper-relation"{tuple_delimiter}"Then Taylor did something unexpected: they paused beside Jordan and, for a moment, observed the device with something akin to reverence."{tuple_delimiter}8){record_delimiter}
-("entity"{tuple_delimiter}"Taylor"{tuple_delimiter}"person"{tuple_delimiter}"Taylor is a person who did something unexpected."{tuple_delimiter}90){record_delimiter}
-("entity"{tuple_delimiter}"Jordan"{tuple_delimiter}"person"{tuple_delimiter}"Jordan is a person who was observed by Taylor."{tuple_delimiter}90){record_delimiter}
-("entity"{tuple_delimiter}"device"{tuple_delimiter}"object"{tuple_delimiter}"The device was observed by Taylor."{tuple_delimiter}80){record_delimiter}
-("hyper-relation"{tuple_delimiter}"“If this tech can be understood…” Taylor said, their voice quieter, “It could change the game for us. For all of us.”"{tuple_delimiter}8){record_delimiter}
-("entity"{tuple_delimiter}"Taylor"{tuple_delimiter}"person"{tuple_delimiter}"Taylor is a person who said something about the tech."{tuple_delimiter}90){record_delimiter}
-("entity"{tuple_delimiter}"device"{tuple_delimiter}"object"{tuple_delimiter}"The tech could change the game for us."{tuple_delimiter}85){record_delimiter}
-("hyper-relation"{tuple_delimiter}"The underlying dismissal earlier seemed to falter, replaced by a glimpse of reluctant respect for the gravity of what lay in their hands."{tuple_delimiter}7){record_delimiter}
-("entity"{tuple_delimiter}"Taylor"{tuple_delimiter}"person"{tuple_delimiter}"Taylor is a person who had an underlying dismissal earlier."{tuple_delimiter}85){record_delimiter}
-("hyper-relation"{tuple_delimiter}"Jordan looked up, and for a fleeting heartbeat, their eyes locked with Taylor’s, a wordless clash of wills softening into an uneasy truce."{tuple_delimiter}8){record_delimiter}
-("entity"{tuple_delimiter}"Jordan"{tuple_delimiter}"person"{tuple_delimiter}"Jordan is a person who looked up."{tuple_delimiter}90){record_delimiter}
-("entity"{tuple_delimiter}"Taylor"{tuple_delimiter}"person"{tuple_delimiter}"Taylor is a person who had a wordless clash of wills with Jordan."{tuple_delimiter}90){record_delimiter}
-("hyper-relation"{tuple_delimiter}"It was a small transformation, barely perceptible, but one that Alex noted with an inward nod."{tuple_delimiter}6){record_delimiter}
-("entity"{tuple_delimiter}"Alex"{tuple_delimiter}"person"{tuple_delimiter}"Alex is a person who noted a small transformation."{tuple_delimiter}95){record_delimiter}
-("hyper-relation"{tuple_delimiter}"They had all been brought here by different paths."{tuple_delimiter}6){record_delimiter}
-("entity"{tuple_delimiter}"Alex"{tuple_delimiter}"person"{tuple_delimiter}"Alex is a person who was brought here by different paths."{tuple_delimiter}80){record_delimiter}
-("entity"{tuple_delimiter}"Taylor"{tuple_delimiter}"person"{tuple_delimiter}"Taylor is a person who was brought here by different paths."{tuple_delimiter}80){record_delimiter}
-("entity"{tuple_delimiter}"Jordan"{tuple_delimiter}"person"{tuple_delimiter}"Jordan is a person who was brought here by different paths."{tuple_delimiter}80){record_delimiter}
+输出：
+("hyper-relation"{tuple_delimiter}"在项目评审会上，张伟代表星河科技介绍了面向电力巡检的智能识别系统。"{tuple_delimiter}9){record_delimiter}
+("entity"{tuple_delimiter}"张伟"{tuple_delimiter}"人物"{tuple_delimiter}"张伟是代表星河科技在项目评审会上介绍智能识别系统的人。"{tuple_delimiter}95){record_delimiter}
+("entity"{tuple_delimiter}"星河科技"{tuple_delimiter}"组织"{tuple_delimiter}"星河科技是张伟所属或代表的组织，参与面向电力巡检的智能识别系统项目。"{tuple_delimiter}90){record_delimiter}
+("entity"{tuple_delimiter}"智能识别系统"{tuple_delimiter}"类别"{tuple_delimiter}"智能识别系统是面向电力巡检的系统，用于识别多类巡检风险。"{tuple_delimiter}92){record_delimiter}
+("hyper-relation"{tuple_delimiter}"该系统由研发部和华东电网联合测试，能够识别杆塔缺陷、鸟巢隐患和通道异物。"{tuple_delimiter}9){record_delimiter}
+("entity"{tuple_delimiter}"研发部"{tuple_delimiter}"组织"{tuple_delimiter}"研发部参与了智能识别系统的联合测试。"{tuple_delimiter}85){record_delimiter}
+("entity"{tuple_delimiter}"华东电网"{tuple_delimiter}"组织"{tuple_delimiter}"华东电网参与了智能识别系统的联合测试。"{tuple_delimiter}88){record_delimiter}
+("entity"{tuple_delimiter}"杆塔缺陷"{tuple_delimiter}"类别"{tuple_delimiter}"杆塔缺陷是智能识别系统能够识别的电力巡检风险之一。"{tuple_delimiter}82){record_delimiter}
+("entity"{tuple_delimiter}"鸟巢隐患"{tuple_delimiter}"类别"{tuple_delimiter}"鸟巢隐患是智能识别系统能够识别的电力巡检风险之一。"{tuple_delimiter}82){record_delimiter}
+("entity"{tuple_delimiter}"通道异物"{tuple_delimiter}"类别"{tuple_delimiter}"通道异物是智能识别系统能够识别的电力巡检风险之一。"{tuple_delimiter}82){record_delimiter}
+("hyper-relation"{tuple_delimiter}"李娜指出系统在雨雾天气下的准确率仍需提升，并建议下一阶段增加山区线路样本，由运维中心负责数据标注。"{tuple_delimiter}10){record_delimiter}
+("entity"{tuple_delimiter}"李娜"{tuple_delimiter}"人物"{tuple_delimiter}"李娜指出智能识别系统在雨雾天气下准确率仍需提升，并提出下一阶段改进建议。"{tuple_delimiter}93){record_delimiter}
+("entity"{tuple_delimiter}"雨雾天气"{tuple_delimiter}"类别"{tuple_delimiter}"雨雾天气是影响智能识别系统准确率的场景条件。"{tuple_delimiter}78){record_delimiter}
+("entity"{tuple_delimiter}"山区线路样本"{tuple_delimiter}"类别"{tuple_delimiter}"山区线路样本是李娜建议下一阶段增加的数据样本。"{tuple_delimiter}84){record_delimiter}
+("entity"{tuple_delimiter}"运维中心"{tuple_delimiter}"组织"{tuple_delimiter}"运维中心被建议负责下一阶段的数据标注工作。"{tuple_delimiter}86)
 #############################""",
-    """Example 2:
+    """示例 2：
 
-Text:
-They were no longer mere operatives; they had become guardians of a threshold, keepers of a message from a realm beyond stars and stripes. This elevation in their mission could not be shackled by regulations and established protocols—it demanded a new perspective, a new resolve. Tension threaded through the dialogue of beeps and static as communications with Washington buzzed in the background. The team stood, a portentous air enveloping them. It was clear that the decisions they made in the ensuing hours could redefine humanity's place in the cosmos or condemn them to ignorance and potential peril. Their connection to the stars solidified, the group moved to address the crystallizing warning, shifting from passive recipients to active participants. Mercer's latter instincts gained precedence— the team's mandate had evolved, no longer solely to observe and report but to interact and prepare. A metamorphosis had begun, and Operation: Dulce hummed with the newfound frequency of their daring, a tone set not by the earthly
+文本：
+南湖变电站改造工程于2024年6月启动，建设单位为江城供电公司。工程重点包括更换主变压器、升级继电保护装置以及新建远程监控平台。项目经理王敏要求施工队在汛期前完成主设备安装，因为南湖片区夏季负荷增长明显，供电可靠性压力较大。
 #############
-Output:
-("hyper-relation"{tuple_delimiter}"They were no longer mere operatives; they had become guardians of a threshold, keepers of a message from a realm beyond stars and stripes."{tuple_delimiter}9){record_delimiter}
-("entity"{tuple_delimiter}"operatives"{tuple_delimiter}"role"{tuple_delimiter}"They were mere operatives."{tuple_delimiter}85){record_delimiter}
-("entity"{tuple_delimiter}"guardians"{tuple_delimiter}"role"{tuple_delimiter}"They had become guardians of a threshold."{tuple_delimiter}85){record_delimiter}
-("entity"{tuple_delimiter}"threshold"{tuple_delimiter}"concept"{tuple_delimiter}"They were guardians of a threshold."{tuple_delimiter}85){record_delimiter}
-("entity"{tuple_delimiter}"message"{tuple_delimiter}"concept"{tuple_delimiter}"They were keepers of a message."{tuple_delimiter}85){record_delimiter}
-("entity"{tuple_delimiter}"realm"{tuple_delimiter}"location"{tuple_delimiter}"They were keepers of a message from a realm beyond stars and stripes."{tuple_delimiter}90){record_delimiter}
-("hyper-relation"{tuple_delimiter}"This elevation in their mission could not be shackled by regulations and established protocols—it demanded a new perspective, a new resolve."{tuple_delimiter}9){record_delimiter}
-("entity"{tuple_delimiter}"elevation"{tuple_delimiter}"concept"{tuple_delimiter}"Their mission was elevated."{tuple_delimiter}85){record_delimiter}
-("entity"{tuple_delimiter}"mission"{tuple_delimiter}"concept"{tuple_delimiter}"Their mission was elevated."{tuple_delimiter}85){record_delimiter}
-("entity"{tuple_delimiter}"resolve"{tuple_delimiter}"concept"{tuple_delimiter}"Their mission demanded a new resolve."{tuple_delimiter}85){record_delimiter}
-("hyper-relation"{tuple_delimiter}"Tension threaded through the dialogue of beeps and static as communications with Washington buzzed in the background."{tuple_delimiter}8){record_delimiter}
-("entity"{tuple_delimiter}"tension"{tuple_delimiter}"concept"{tuple_delimiter}"Tension threaded through the dialogue."{tuple_delimiter}85){record_delimiter}
-("entity"{tuple_delimiter}"communications"{tuple_delimiter}"concept"{tuple_delimiter}"Communications with Washington buzzed in the background."{tuple_delimiter}85){record_delimiter}
-("entity"{tuple_delimiter}"Washington"{tuple_delimiter}"location"{tuple_delimiter}"Communications with Washington buzzed in the background."{tuple_delimiter}90){record_delimiter}
-("hyper-relation"{tuple_delimiter}"The team stood, a portentous air enveloping them."{tuple_delimiter}7){record_delimiter}
-("entity"{tuple_delimiter}"team"{tuple_delimiter}"role"{tuple_delimiter}"The team stood."{tuple_delimiter}95){record_delimiter}
-("entity"{tuple_delimiter}"portentous air"{tuple_delimiter}"concept"{tuple_delimiter}"The team was enveloped by a portentous air."{tuple_delimiter}85){record_delimiter}
-("hyper-relation"{tuple_delimiter}"It was clear that the decisions they made in the ensuing hours could redefine humanity’s place in the cosmos or condemn them to ignorance and potential peril."{tuple_delimiter}9){record_delimiter}
-("entity"{tuple_delimiter}"decisions"{tuple_delimiter}"concept"{tuple_delimiter}"The decisions could redefine humanity’s place in the cosmos."{tuple_delimiter}85){record_delimiter}
-("entity"{tuple_delimiter}"humanity’s place"{tuple_delimiter}"concept"{tuple_delimiter}"The decisions could redefine humanity’s place in the cosmos."{tuple_delimiter}85){record_delimiter}
-("entity"{tuple_delimiter}"cosmos"{tuple_delimiter}"location"{tuple_delimiter}"The decisions could redefine humanity’s place in the cosmos."{tuple_delimiter}90){record_delimiter}
-("entity"{tuple_delimiter}"ignorance"{tuple_delimiter}"concept"{tuple_delimiter}"The decisions could condemn them to ignorance."{tuple_delimiter}85){record_delimiter}
-("entity"{tuple_delimiter}"peril"{tuple_delimiter}"concept"{tuple_delimiter}"The decisions could condemn them to potential peril."{tuple_delimiter}85){record_delimiter}
-("hyper-relation"{tuple_delimiter}"Their connection to the stars solidified, the group moved to address the crystallizing warning, shifting from passive recipients to active participants."{tuple_delimiter}9){record_delimiter}
-("entity"{tuple_delimiter}"connection"{tuple_delimiter}"concept"{tuple_delimiter}"Their connection to the stars solidified."{tuple_delimiter}85){record_delimiter}
-("entity"{tuple_delimiter}"stars"{tuple_delimiter}"location"{tuple_delimiter}"Their connection to the stars solidified."{tuple_delimiter}90){record_delimiter}
-("entity"{tuple_delimiter}"group"{tuple_delimiter}"role"{tuple_delimiter}"The group moved to address the crystallizing warning."{tuple_delimiter}85){record_delimiter}
-("entity"{tuple_delimiter}"crystallizing warning"{tuple_delimiter}"concept"{tuple_delimiter}"The group moved to address the crystallizing warning."{tuple_delimiter}85){record_delimiter}
-("entity"{tuple_delimiter}"passive recipients"{tuple_delimiter}"role"{tuple_delimiter}"The group shifted from passive recipients to active participants."{tuple_delimiter}85){record_delimiter}
-("entity"{tuple_delimiter}"active participants"{tuple_delimiter}"role"{tuple_delimiter}"The group shifted from passive recipients to active participants."{tuple_delimiter}85){record_delimiter}
-("hyper-relation"{tuple_delimiter}"Mercer’s latter instincts gained precedence— the team’s mandate had evolved, no longer solely to observe and report but to interact and prepare."{tuple_delimiter}9){record_delimiter}
-("entity"{tuple_delimiter}"Mercer"{tuple_delimiter}"person"{tuple_delimiter}"Mercer’s instincts gained precedence."{tuple_delimiter}85){record_delimiter}
-("entity"{tuple_delimiter}"instincts"{tuple_delimiter}"concept"{tuple_delimiter}"Mercer’s instincts gained precedence."{tuple_delimiter}85){record_delimiter}
-("entity"{tuple_delimiter}"team’s mandate"{tuple_delimiter}"concept"{tuple_delimiter}"The team’s mandate had evolved."{tuple_delimiter}85){record_delimiter}
-("hyper-relation"{tuple_delimiter}"A metamorphosis had begun, and Operation: Dulce hummed with the newfound frequency of their daring, a tone set not by the earthly"{tuple_delimiter}8){record_delimiter}
-("entity"{tuple_delimiter}"metamorphosis"{tuple_delimiter}"concept"{tuple_delimiter}"A metamorphosis had begun."{tuple_delimiter}85){record_delimiter}
-("entity"{tuple_delimiter}"Operation: Dulce"{tuple_delimiter}"event"{tuple_delimiter}"Operation: Dulce hummed with the newfound frequency of their daring."{tuple_delimiter}85){record_delimiter}
-("entity"{tuple_delimiter}"frequency"{tuple_delimiter}"concept"{tuple_delimiter}"Operation: Dulce hummed with the newfound frequency of their daring."{tuple_delimiter}85){record_delimiter}
-("entity"{tuple_delimiter}"daring"{tuple_delimiter}"concept"{tuple_delimiter}"Operation: Dulce hummed with the newfound frequency of their daring."{tuple_delimiter}85){record_delimiter}
+输出：
+("hyper-relation"{tuple_delimiter}"南湖变电站改造工程于2024年6月启动，建设单位为江城供电公司。"{tuple_delimiter}9){record_delimiter}
+("entity"{tuple_delimiter}"南湖变电站改造工程"{tuple_delimiter}"事件"{tuple_delimiter}"南湖变电站改造工程是于2024年6月启动的工程项目。"{tuple_delimiter}95){record_delimiter}
+("entity"{tuple_delimiter}"江城供电公司"{tuple_delimiter}"组织"{tuple_delimiter}"江城供电公司是南湖变电站改造工程的建设单位。"{tuple_delimiter}92){record_delimiter}
+("hyper-relation"{tuple_delimiter}"工程重点包括更换主变压器、升级继电保护装置以及新建远程监控平台。"{tuple_delimiter}9){record_delimiter}
+("entity"{tuple_delimiter}"主变压器"{tuple_delimiter}"类别"{tuple_delimiter}"主变压器是南湖变电站改造工程计划更换的主设备。"{tuple_delimiter}86){record_delimiter}
+("entity"{tuple_delimiter}"继电保护装置"{tuple_delimiter}"类别"{tuple_delimiter}"继电保护装置是南湖变电站改造工程计划升级的设备。"{tuple_delimiter}86){record_delimiter}
+("entity"{tuple_delimiter}"远程监控平台"{tuple_delimiter}"类别"{tuple_delimiter}"远程监控平台是南湖变电站改造工程计划新建的平台。"{tuple_delimiter}85){record_delimiter}
+("hyper-relation"{tuple_delimiter}"项目经理王敏要求施工队在汛期前完成主设备安装，因为南湖片区夏季负荷增长明显，供电可靠性压力较大。"{tuple_delimiter}10){record_delimiter}
+("entity"{tuple_delimiter}"王敏"{tuple_delimiter}"人物"{tuple_delimiter}"王敏是南湖变电站改造工程的项目经理，要求施工队在汛期前完成主设备安装。"{tuple_delimiter}94){record_delimiter}
+("entity"{tuple_delimiter}"施工队"{tuple_delimiter}"组织"{tuple_delimiter}"施工队被要求在汛期前完成南湖变电站改造工程的主设备安装。"{tuple_delimiter}88){record_delimiter}
+("entity"{tuple_delimiter}"南湖片区"{tuple_delimiter}"地点"{tuple_delimiter}"南湖片区在夏季负荷增长明显，面临较大的供电可靠性压力。"{tuple_delimiter}87){record_delimiter}
+("entity"{tuple_delimiter}"汛期"{tuple_delimiter}"事件"{tuple_delimiter}"汛期是王敏要求完成主设备安装之前的关键时间节点。"{tuple_delimiter}80)
 #############################""",
-    """Example 3:
+    """示例 3：
 
-Text:
-their voice slicing through the buzz of activity. "Control may be an illusion when facing an intelligence that literally writes its own rules," they stated stoically, casting a watchful eye over the flurry of data. "It's like it's learning to communicate," offered Sam Rivera from a nearby interface, their youthful energy boding a mix of awe and anxiety. "This gives talking to strangers' a whole new meaning." Alex surveyed his team—each face a study in concentration, determination, and not a small measure of trepidation. "This might well be our first contact," he acknowledged, "And we need to be ready for whatever answers back." Together, they stood on the edge of the unknown, forging humanity's response to a message from the heavens. The ensuing silence was palpable—a collective introspection about their role in this grand cosmic play, one that could rewrite human history. The encrypted dialogue continued to unfold, its intricate patterns showing an almost uncanny anticipation
+文本：
+《城市配电网防鸟害技术导则》提出，鸟害高发区应优先采用绝缘护套、驱鸟刺和声光驱鸟器组合防护。导则还要求运行单位建立鸟巢清理台账，并在春季繁殖期加强巡视。对于生态保护区内的线路，文件强调不得随意破坏鸟类栖息地，应采用非伤害性措施降低跳闸风险。
 #############
-Output:
-("hyper-relation"{tuple_delimiter}"“Control may be an illusion when facing an intelligence that literally writes its own rules,” they stated stoically, casting a watchful eye over the flurry of data."{tuple_delimiter}8){record_delimiter}
-("entity"{tuple_delimiter}"control"{tuple_delimiter}"concept"{tuple_delimiter}"Control may be an illusion when facing an intelligence that literally writes its own rules."{tuple_delimiter}90){record_delimiter}
-("entity"{tuple_delimiter}"illusion"{tuple_delimiter}"concept"{tuple_delimiter}"Control may be an illusion when facing an intelligence that literally writes its own rules."{tuple_delimiter}90){record_delimiter}
-("entity"{tuple_delimiter}"intelligence"{tuple_delimiter}"concept"{tuple_delimiter}"Control may be an illusion when facing an intelligence that literally writes its own rules."{tuple_delimiter}90){record_delimiter}
-("entity"{tuple_delimiter}"data"{tuple_delimiter}"object"{tuple_delimiter}"Control may be an illusion when facing an intelligence that literally writes its own rules."{tuple_delimiter}85){record_delimiter}
-("hyper-relation"{tuple_delimiter}"“It’s like it’s learning to communicate,” offered Sam Rivera from a nearby interface, their youthful energy boding a mix of awe and anxiety."{tuple_delimiter}7){record_delimiter}
-("entity"{tuple_delimiter}"communication"{tuple_delimiter}"concept"{tuple_delimiter}"It’s like it’s learning to communicate."{tuple_delimiter}90){record_delimiter}
-("entity"{tuple_delimiter}"Sam Rivera"{tuple_delimiter}"person"{tuple_delimiter}"Sam Rivera offered something."{tuple_delimiter}85){record_delimiter}
-("entity"{tuple_delimiter}"interface"{tuple_delimiter}"object"{tuple_delimiter}"Sam Rivera offered something from a nearby interface."{tuple_delimiter}85){record_delimiter}
-("hyper-relation"{tuple_delimiter}"“This gives ‘talking to strangers’ a whole new meaning.”"{tuple_delimiter}6){record_delimiter}
-("entity"{tuple_delimiter}"talking to strangers"{tuple_delimiter}"concept"{tuple_delimiter}"This gives ‘talking to strangers’ a whole new meaning."{tuple_delimiter}90){record_delimiter}
-("hyper-relation"{tuple_delimiter}"“This might well be our first contact,” he acknowledged, “And we need to be ready for whatever answers back.”"{tuple_delimiter}8){record_delimiter}
-("entity"{tuple_delimiter}"first contact"{tuple_delimiter}"concept"{tuple_delimiter}"This might well be our first contact."{tuple_delimiter}90){record_delimiter}
-("entity"{tuple_delimiter}"answers"{tuple_delimiter}"action"{tuple_delimiter}"We need to be ready for whatever answers back."{tuple_delimiter}85){record_delimiter}
-("hyper-relation"{tuple_delimiter}"Together, they stood on the edge of the unknown, forging humanity’s response to a message from the heavens."{tuple_delimiter}9){record_delimiter}
-("entity"{tuple_delimiter}"edge of the unknown"{tuple_delimiter}"concept"{tuple_delimiter}"They stood on the edge of the unknown."{tuple_delimiter}90){record_delimiter}
-("entity"{tuple_delimiter}"humanity’s response"{tuple_delimiter}"concept"{tuple_delimiter}"They were forging humanity’s response to a message from the heavens."{tuple_delimiter}90){record_delimiter}
-("entity"{tuple_delimiter}"heavens"{tuple_delimiter}"location"{tuple_delimiter}"They were forging humanity’s response to a message from the heavens."{tuple_delimiter}90){record_delimiter}
-("hyper-relation"{tuple_delimiter}"The ensuing silence was palpable—a collective introspection about their role in this grand cosmic play, one that could rewrite human history."{tuple_delimiter}9){record_delimiter}
-("entity"{tuple_delimiter}"silence"{tuple_delimiter}"concept"{tuple_delimiter}"The ensuing silence was palpable."{tuple_delimiter}90){record_delimiter}
-("entity"{tuple_delimiter}"introspection"{tuple_delimiter}"concept"{tuple_delimiter}"The ensuing silence was a collective introspection."{tuple_delimiter}90){record_delimiter}
-("entity"{tuple_delimiter}"cosmic play"{tuple_delimiter}"concept"{tuple_delimiter}"The ensuing silence was about their role in this grand cosmic play."{tuple_delimiter}90){record_delimiter}
-("entity"{tuple_delimiter}"human history"{tuple_delimiter}"concept"{tuple_delimiter}"The ensuing silence was about their role in this grand cosmic play, one that could rewrite human history."{tuple_delimiter}90){record_delimiter}
-("hyper-relation"{tuple_delimiter}"The encrypted dialogue continued to unfold, its intricate patterns showing an almost uncanny anticipation."{tuple_delimiter}8){record_delimiter}
-("entity"{tuple_delimiter}"encrypted dialogue"{tuple_delimiter}"object"{tuple_delimiter}"The encrypted dialogue continued to unfold."{tuple_delimiter}85){record_delimiter}
-("entity"{tuple_delimiter}"patterns"{tuple_delimiter}"concept"{tuple_delimiter}"The encrypted dialogue showed intricate patterns."{tuple_delimiter}85){record_delimiter}
+输出：
+("hyper-relation"{tuple_delimiter}"《城市配电网防鸟害技术导则》提出，鸟害高发区应优先采用绝缘护套、驱鸟刺和声光驱鸟器组合防护。"{tuple_delimiter}10){record_delimiter}
+("entity"{tuple_delimiter}"城市配电网防鸟害技术导则"{tuple_delimiter}"类别"{tuple_delimiter}"《城市配电网防鸟害技术导则》提出了城市配电网鸟害防护的技术要求。"{tuple_delimiter}96){record_delimiter}
+("entity"{tuple_delimiter}"鸟害高发区"{tuple_delimiter}"地点"{tuple_delimiter}"鸟害高发区是导则建议优先采用组合防护措施的区域。"{tuple_delimiter}90){record_delimiter}
+("entity"{tuple_delimiter}"绝缘护套"{tuple_delimiter}"类别"{tuple_delimiter}"绝缘护套是鸟害高发区优先采用的防护措施之一。"{tuple_delimiter}85){record_delimiter}
+("entity"{tuple_delimiter}"驱鸟刺"{tuple_delimiter}"类别"{tuple_delimiter}"驱鸟刺是鸟害高发区优先采用的防护措施之一。"{tuple_delimiter}85){record_delimiter}
+("entity"{tuple_delimiter}"声光驱鸟器"{tuple_delimiter}"类别"{tuple_delimiter}"声光驱鸟器是鸟害高发区优先采用的防护措施之一。"{tuple_delimiter}85){record_delimiter}
+("hyper-relation"{tuple_delimiter}"导则要求运行单位建立鸟巢清理台账，并在春季繁殖期加强巡视。"{tuple_delimiter}9){record_delimiter}
+("entity"{tuple_delimiter}"运行单位"{tuple_delimiter}"组织"{tuple_delimiter}"运行单位被要求建立鸟巢清理台账，并在春季繁殖期加强巡视。"{tuple_delimiter}90){record_delimiter}
+("entity"{tuple_delimiter}"鸟巢清理台账"{tuple_delimiter}"类别"{tuple_delimiter}"鸟巢清理台账是运行单位需要建立的管理记录。"{tuple_delimiter}86){record_delimiter}
+("entity"{tuple_delimiter}"春季繁殖期"{tuple_delimiter}"事件"{tuple_delimiter}"春季繁殖期是运行单位需要加强巡视的时期。"{tuple_delimiter}84){record_delimiter}
+("hyper-relation"{tuple_delimiter}"对于生态保护区内的线路，文件强调不得随意破坏鸟类栖息地，应采用非伤害性措施降低跳闸风险。"{tuple_delimiter}10){record_delimiter}
+("entity"{tuple_delimiter}"生态保护区"{tuple_delimiter}"地点"{tuple_delimiter}"生态保护区内的线路需要采取不破坏鸟类栖息地的防鸟害措施。"{tuple_delimiter}90){record_delimiter}
+("entity"{tuple_delimiter}"鸟类栖息地"{tuple_delimiter}"地点"{tuple_delimiter}"鸟类栖息地在生态保护区线路防护中不得被随意破坏。"{tuple_delimiter}86){record_delimiter}
+("entity"{tuple_delimiter}"非伤害性措施"{tuple_delimiter}"类别"{tuple_delimiter}"非伤害性措施是生态保护区线路降低跳闸风险时应采用的措施。"{tuple_delimiter}88){record_delimiter}
+("entity"{tuple_delimiter}"跳闸风险"{tuple_delimiter}"类别"{tuple_delimiter}"跳闸风险是生态保护区线路通过非伤害性措施需要降低的风险。"{tuple_delimiter}87)
 #############################""",
 ]
 
 PROMPTS[
     "summarize_entity_descriptions"
-] = """You are a helpful assistant responsible for generating a comprehensive summary of the data provided below.
-Given one or two entities, and a list of descriptions, all related to the same entity or group of entities.
-Please concatenate all of these into a single, comprehensive description. Make sure to include information collected from all the descriptions.
-If the provided descriptions are contradictory, please resolve the contradictions and provide a single, coherent summary.
-Make sure it is written in third person, and include the entity names so we the have full context.
-Use {language} as output language.
+] = """你是一个负责根据下方数据生成全面摘要的有用助手。
+给定一个或两个实体，以及一组描述；这些描述都与同一个实体或同一组实体相关。
+请将这些描述整合为一个单一、全面的描述，并确保纳入所有描述中收集到的信息。
+如果提供的描述相互矛盾，请解决矛盾，并给出单一、连贯的摘要。
+请使用第三人称写作，并包含实体名称，以便保留完整上下文。
+请使用 {language} 作为输出语言。
 
 #######
--Data-
-Entities: {entity_name}
-Description List: {description_list}
+-数据-
+实体：{entity_name}
+描述列表：{description_list}
 #######
-Output:
+输出：
 """
 
 PROMPTS[
     "entiti_continue_extraction"
-] = """MANY knowdge fragements with entities were missed in the last extraction.  Add them below using the same format:
+] = """上一次抽取遗漏了许多包含实体的知识片段。请使用相同格式在下方补充：
 """
 
 PROMPTS[
     "entiti_if_loop_extraction"
-] = """Please check whether knowdge fragements cover all the given text.  Answer YES | NO if there are knowdge fragements that need to be added.
+] = """请检查已抽取的知识片段是否覆盖了给定文本的全部内容。如果仍有需要补充的知识片段，请回答 YES；否则回答 NO。只回答 YES 或 NO。
 """
 
-PROMPTS["fail_response"] = "Sorry, I'm not able to provide an answer to that question."
+PROMPTS["fail_response"] = "抱歉，我无法回答这个问题。"
 
-PROMPTS["rag_response"] = """---Role---
+PROMPTS["rag_response"] = """---角色---
 
-You are a helpful assistant responding to questions about data in the tables provided.
+你是一个有用的助手，负责回答与所提供表格数据相关的问题。
 
 
----Goal---
+---目标---
 
-Generate a response of the target length and format that responds to the user's question, summarizing all information in the input data tables appropriate for the response length and format, and incorporating any relevant general knowledge.
-If you don't know the answer, just say so. Do not make anything up.
-Do not include information where the supporting evidence for it is not provided.
+生成符合目标长度和格式的回答，以回应用户问题；根据回答长度和格式，汇总输入数据表中的全部相关信息，并结合必要的通用知识。
+如果你不知道答案，请直接说明。不要编造。
+不要包含缺乏支持证据的信息。
 
----Target response length and format---
+---目标回答长度和格式---
 
 {response_type}
 
----Data tables---
+---数据表---
 
 {context_data}
 
-Add sections and commentary to the response as appropriate for the length and format. Style the response in markdown.
+请根据目标长度和格式，在回答中适当添加章节和说明。回答样式使用 Markdown。
 """
 
-# PROMPTS["rag_response"] = """---Role---
+# PROMPTS["rag_response"] = """---角色---
 
-# You are an intelligent and precise AI assistant, answering questions based on structured data tables.
+# 你是一个智能且精确的 AI 助手，基于结构化数据表回答问题。
 
 
-# ---Goal---
+# ---目标---
 
-# Generate a semantically accurate, factually correct, and highly relevant response that directly addresses the user’s question. The response should:
-# 	•	Maximize semantic alignment with expected answers, ensuring high similarity.
-# 	•	Ensure factual correctness, preserving key details, names, numbers, and relationships as in the data.
-# 	•	Stay fully relevant to the user’s query, avoiding unnecessary information while ensuring completeness.
-# 	•	Use structured formatting (headings, bullet points, tables) to enhance clarity and coherence.
-# 	•	Maintain a natural and precise writing style, improving readability.
+# 生成语义准确、事实正确且高度相关的回答，直接回应用户问题。回答应当：
+#   • 最大化与期望答案的语义一致性，确保高相似度。
+#   • 确保事实正确，保留数据中的关键细节、名称、数字和关系。
+#   • 与用户问题完全相关，避免不必要信息，同时保证完整性。
+#   • 使用结构化格式（标题、项目符号、表格）提升清晰度和连贯性。
+#   • 保持自然且精确的写作风格，提升可读性。
 
-# ---Target response length and format---
+# ---目标回答长度和格式---
 
 # {response_type}
 
-# ---Data tables---
+# ---数据表---
 
 # {context_data}
 
-# Response Guidelines
-# 	1.	Prioritize Key Details: Extract and summarize the most relevant information while maintaining completeness.
-# 	2.	Maintain Semantic Consistency: Ensure expressions are close to reference answers to improve similarity.
-# 	3.	Preserve Key Entities and Structure: Names, dates, numbers, and relationships must be correctly retained.
-# 	4.	Ensure Logical Flow: Structure the response in a way that enhances clarity and coherence.
-# 	5.	Keep It Concise and Relevant: Avoid redundant details and focus on answering the question directly.
+# 回答准则
+#   1. 优先保留关键细节：抽取并总结最相关的信息，同时保持完整性。
+#   2. 保持语义一致：确保表达尽量贴近期望答案以提升相似度。
+#   3. 保留关键实体和结构：必须正确保留名称、日期、数字和关系。
+#   4. 确保逻辑流畅：用提升清晰度和连贯性的方式组织回答。
+#   5. 简洁且相关：避免冗余细节，专注于直接回答问题。
 # """
 
-PROMPTS["keywords_extraction"] = """---Role---
+PROMPTS["keywords_extraction"] = """---角色---
 
-You are a helpful assistant tasked with identifying both high-level and low-level keywords in the user's query.
+你是一个有用的助手，负责识别用户查询中的高层关键词和低层关键词。
 
----Goal---
+---目标---
 
-Given the query, list both high-level and low-level keywords. High-level keywords focus on overarching concepts or themes, while low-level keywords focus on specific entities, details, or concrete terms.
+给定查询，请列出高层关键词和低层关键词。高层关键词关注总体概念或主题；低层关键词关注具体实体、细节或具体术语。
 
----Instructions---
+---说明---
 
-- Output the keywords in JSON format.
-- The JSON should have two keys:
-  - "high_level_keywords" for overarching concepts or themes.
-  - "low_level_keywords" for specific entities or details.
+- 使用 JSON 格式输出关键词。
+- JSON 必须包含两个键：
+  - "high_level_keywords"：表示总体概念或主题。
+  - "low_level_keywords"：表示具体实体或细节。
 
 ######################
--Examples-
+-示例-
 ######################
 {examples}
 
 #############################
--Real Data-
+-真实数据-
 ######################
-Query: {query}
+查询：{query}
 ######################
-The `Output` should be human text, not unicode characters. Keep the same language as `Query`.
-Output:
+输出内容应为可读文本，不要使用 Unicode 转义字符。保持与查询相同的语言。
+输出：
 
 """
 
 PROMPTS["keywords_extraction_examples"] = [
-    """Example 1:
+    """示例 1：
 
-Query: "How does international trade influence global economic stability?"
+查询："国际贸易如何影响全球经济稳定？"
 ################
-Output:
+输出：
 {{
-  "high_level_keywords": ["International trade", "Global economic stability", "Economic impact"],
-  "low_level_keywords": ["Trade agreements", "Tariffs", "Currency exchange", "Imports", "Exports"]
+  "high_level_keywords": ["国际贸易", "全球经济稳定", "经济影响"],
+  "low_level_keywords": ["贸易协定", "关税", "汇率", "进口", "出口"]
 }}
 #############################""",
-    """Example 2:
+    """示例 2：
 
-Query: "What are the environmental consequences of deforestation on biodiversity?"
+查询："森林砍伐会对生物多样性造成哪些环境后果？"
 ################
-Output:
+输出：
 {{
-  "high_level_keywords": ["Environmental consequences", "Deforestation", "Biodiversity loss"],
-  "low_level_keywords": ["Species extinction", "Habitat destruction", "Carbon emissions", "Rainforest", "Ecosystem"]
+  "high_level_keywords": ["环境后果", "森林砍伐", "生物多样性丧失"],
+  "low_level_keywords": ["物种灭绝", "栖息地破坏", "碳排放", "雨林", "生态系统"]
 }}
 #############################""",
-    """Example 3:
+    """示例 3：
 
-Query: "What is the role of education in reducing poverty?"
+查询："教育在减少贫困方面起什么作用？"
 ################
-Output:
+输出：
 {{
-  "high_level_keywords": ["Education", "Poverty reduction", "Socioeconomic development"],
-  "low_level_keywords": ["School access", "Literacy rates", "Job training", "Income inequality"]
+  "high_level_keywords": ["教育", "减贫", "社会经济发展"],
+  "low_level_keywords": ["入学机会", "识字率", "职业培训", "收入不平等"]
 }}
 #############################""",
 ]
 
 
-PROMPTS["naive_rag_response"] = """---Role---
+PROMPTS["naive_rag_response"] = """---角色---
 
-You are a helpful assistant responding to questions about documents provided.
+你是一个有用的助手，负责回答与所提供文档相关的问题。
 
 
----Goal---
+---目标---
 
-Generate a response of the target length and format that responds to the user's question, summarizing all information in the input data tables appropriate for the response length and format, and incorporating any relevant general knowledge.
-If you don't know the answer, just say so. Do not make anything up.
-Do not include information where the supporting evidence for it is not provided.
+生成符合目标长度和格式的回答，以回应用户问题；根据回答长度和格式，汇总输入数据表中的全部相关信息，并结合必要的通用知识。
+如果你不知道答案，请直接说明。不要编造。
+不要包含缺乏支持证据的信息。
 
----Target response length and format---
+---目标回答长度和格式---
 
 {response_type}
 
----Documents---
+---文档---
 
 {content_data}
 
-Add sections and commentary to the response as appropriate for the length and format. Style the response in markdown.
+请根据目标长度和格式，在回答中适当添加章节和说明。回答样式使用 Markdown。
 """
 
 PROMPTS[
     "similarity_check"
-] = """Please analyze the similarity between these two questions:
+] = """请分析以下两个问题之间的相似度：
 
-Question 1: {original_prompt}
-Question 2: {cached_prompt}
+问题 1：{original_prompt}
+问题 2：{cached_prompt}
 
-Please evaluate the following two points and provide a similarity score between 0 and 1 directly:
-1. Whether these two questions are semantically similar
-2. Whether the answer to Question 2 can be used to answer Question 1
-Similarity score criteria:
-0: Completely unrelated or answer cannot be reused, including but not limited to:
-   - The questions have different topics
-   - The locations mentioned in the questions are different
-   - The times mentioned in the questions are different
-   - The specific individuals mentioned in the questions are different
-   - The specific events mentioned in the questions are different
-   - The background information in the questions is different
-   - The key conditions in the questions are different
-1: Identical and answer can be directly reused
-0.5: Partially related and answer needs modification to be used
-Return only a number between 0-1, without any additional content.
+请评估以下两点，并直接给出 0 到 1 之间的相似度分数：
+1. 这两个问题在语义上是否相似
+2. 问题 2 的答案是否可以用于回答问题 1
+相似度评分标准：
+0：完全无关，或答案不能复用，包括但不限于：
+   - 问题主题不同
+   - 问题中提到的地点不同
+   - 问题中提到的时间不同
+   - 问题中提到的具体人物不同
+   - 问题中提到的具体事件不同
+   - 问题中的背景信息不同
+   - 问题中的关键条件不同
+1：完全相同，答案可以直接复用
+0.5：部分相关，答案需要修改后才能使用
+只返回 0 到 1 之间的一个数字，不要返回任何额外内容。
 """
