@@ -2,25 +2,20 @@
 """
 Batch hypergraph construction from all Markdown files in a directory.
 
-Uses a locally deployed vLLM instance (OpenAI-compatible API) for both
-the language model and the embedding model.
+All settings are read from a YAML configuration file (default: config.yaml).
+Any individual value can be overridden at runtime with a CLI flag.
 
-Configuration can be supplied via CLI flags or environment variables:
-  --vllm-base-url / VLLM_BASE_URL     vLLM server URL (default: http://localhost:8000/v1)
-  --llm-model     / VLLM_LLM_MODEL    Model name served as the LLM
-  --embed-model   / VLLM_EMBED_MODEL  Model name served for embeddings
-  --embed-dim     / VLLM_EMBED_DIM    Embedding vector dimension (default: 4096)
-  --embed-max-tokens / VLLM_EMBED_MAX_TOKENS  Max tokens for embedding model (default: 8192)
-  --data-dir      / DATA_DIR          Markdown source directory (default: ./data)
-  --working-dir   / WORKING_DIR       Graph output directory (default: ./expr/batch)
+Usage:
+  # Use the default config.yaml
+  python script_batch_construct.py
 
-Usage example:
-  python script_batch_construct.py \\
-      --vllm-base-url http://localhost:8000/v1 \\
-      --llm-model Qwen/Qwen2.5-7B-Instruct \\
-      --embed-model BAAI/bge-m3 \\
-      --embed-dim 1024 \\
-      --data-dir ./data
+  # Point at a different config file
+  python script_batch_construct.py --config my_config.yaml
+
+  # Override individual values without editing the file
+  python script_batch_construct.py --llm-model Qwen/Qwen2.5-7B-Instruct
+
+Run with --help to see all available flags.
 """
 
 import argparse
@@ -31,6 +26,7 @@ import sys
 import time
 
 import numpy as np
+import yaml
 
 from hypergraphrag import HyperGraphRAG
 from hypergraphrag.llm import openai_complete_if_cache, openai_embedding
@@ -43,80 +39,171 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Hard-coded fallbacks used when a key is absent from both YAML and CLI.
+# ---------------------------------------------------------------------------
+_DEFAULTS = {
+    "data_dir": "./data",
+    "working_dir": "./expr/batch",
+    "vllm_base_url": "http://localhost:8000/v1",
+    "llm_model": "",
+    "llm_max_token_size": 32768,
+    "llm_max_async": 4,
+    "embed_model": "",
+    "embed_dim": 4096,
+    "embed_max_tokens": 8192,
+    "embed_max_async": 8,
+    "chunk_token_size": 1200,
+    "chunk_overlap_token_size": 100,
+    "entity_extract_max_gleaning": 2,
+    "entity_summary_to_max_tokens": 500,
+    "enable_llm_cache": True,
+    "max_retries": 5,
+}
+
+
+def _load_yaml(path: str) -> dict:
+    """Load YAML config and flatten nested sections into a single dict."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            raw = yaml.safe_load(fh) or {}
+    except FileNotFoundError:
+        logger.warning("Config file '%s' not found — using defaults.", path)
+        return {}
+    except yaml.YAMLError as exc:
+        logger.error("Failed to parse '%s': %s", path, exc)
+        sys.exit(1)
+
+    paths = raw.get("paths", {})
+    vllm = raw.get("vllm", {})
+    llm = raw.get("llm", {})
+    emb = raw.get("embedding", {})
+    graph = raw.get("graph", {})
+    batch = raw.get("batch", {})
+
+    return {
+        "data_dir": paths.get("data_dir"),
+        "working_dir": paths.get("working_dir"),
+        "vllm_base_url": vllm.get("base_url"),
+        "llm_model": llm.get("model"),
+        "llm_max_token_size": llm.get("max_token_size"),
+        "llm_max_async": llm.get("max_async"),
+        "embed_model": emb.get("model"),
+        "embed_dim": emb.get("dim"),
+        "embed_max_tokens": emb.get("max_tokens"),
+        "embed_max_async": emb.get("max_async"),
+        "chunk_token_size": graph.get("chunk_token_size"),
+        "chunk_overlap_token_size": graph.get("chunk_overlap_token_size"),
+        "entity_extract_max_gleaning": graph.get("entity_extract_max_gleaning"),
+        "entity_summary_to_max_tokens": graph.get("entity_summary_to_max_tokens"),
+        "enable_llm_cache": graph.get("enable_llm_cache"),
+        "max_retries": batch.get("max_retries"),
+    }
+
 
 def parse_args() -> argparse.Namespace:
+    """
+    Two-pass argument parsing so that --config is resolved before building
+    the full parser, allowing YAML values to serve as argparse defaults.
+    Priority: CLI flag > YAML value > hard-coded default.
+    """
+    # Pass 1 – resolve config file path only.
+    pre = argparse.ArgumentParser(add_help=False)
+    pre.add_argument("--config", default="config.yaml")
+    pre_args, _ = pre.parse_known_args()
+
+    # Load YAML; merge with hard-coded defaults (YAML wins over _DEFAULTS).
+    yaml_cfg = _load_yaml(pre_args.config)
+    merged = {k: (yaml_cfg[k] if yaml_cfg.get(k) is not None else v)
+              for k, v in _DEFAULTS.items()}
+
+    # Pass 2 – full parser; YAML-merged values become argparse defaults so any
+    # explicitly supplied CLI flag still takes precedence.
     parser = argparse.ArgumentParser(
-        description="Build a HyperGraphRAG knowledge graph from Markdown files "
+        description="Build a HyperGraphRAG hypergraph from Markdown files "
         "using a locally deployed vLLM instance.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
-        "--data-dir",
-        default=os.environ.get("DATA_DIR", "./data"),
-        help="Directory containing Markdown (.md / .markdown) files.",
+        "--config",
+        default="config.yaml",
+        metavar="FILE",
+        help="Path to the YAML configuration file.",
     )
-    parser.add_argument(
-        "--working-dir",
-        default=os.environ.get("WORKING_DIR", "./expr/batch"),
-        help="Output directory where the hypergraph is persisted.",
-    )
-    parser.add_argument(
-        "--vllm-base-url",
-        default=os.environ.get("VLLM_BASE_URL", "http://localhost:8000/v1"),
-        help="Base URL of the vLLM OpenAI-compatible server.",
-    )
-    parser.add_argument(
-        "--llm-model",
-        default=os.environ.get("VLLM_LLM_MODEL", ""),
-        help="Name of the LLM model served by vLLM (e.g. Qwen/Qwen2.5-7B-Instruct).",
-    )
-    parser.add_argument(
-        "--embed-model",
-        default=os.environ.get("VLLM_EMBED_MODEL", ""),
-        help="Name of the embedding model served by vLLM (e.g. BAAI/bge-m3).",
-    )
-    parser.add_argument(
-        "--embed-dim",
-        type=int,
-        default=int(os.environ.get("VLLM_EMBED_DIM", "4096")),
-        help="Output dimension of the embedding model.",
-    )
-    parser.add_argument(
-        "--embed-max-tokens",
-        type=int,
-        default=int(os.environ.get("VLLM_EMBED_MAX_TOKENS", "8192")),
-        help="Maximum input token length accepted by the embedding model.",
-    )
-    parser.add_argument(
-        "--llm-max-async",
-        type=int,
-        default=4,
-        help="Maximum number of concurrent LLM requests.",
-    )
-    parser.add_argument(
-        "--embed-max-async",
-        type=int,
-        default=8,
-        help="Maximum number of concurrent embedding requests.",
-    )
-    parser.add_argument(
-        "--max-retries",
-        type=int,
-        default=5,
-        help="Maximum insertion retry attempts before giving up.",
-    )
+
+    # -- Paths --
+    parser.add_argument("--data-dir", default=merged["data_dir"],
+                        help="Directory containing .md / .markdown files.")
+    parser.add_argument("--working-dir", default=merged["working_dir"],
+                        help="Output directory for the hypergraph artefacts.")
+
+    # -- vLLM --
+    parser.add_argument("--vllm-base-url", default=merged["vllm_base_url"],
+                        help="Base URL of the vLLM OpenAI-compatible server.")
+
+    # -- LLM --
+    parser.add_argument("--llm-model", default=merged["llm_model"],
+                        help="LLM model name as served by vLLM.")
+    parser.add_argument("--llm-max-token-size", type=int,
+                        default=merged["llm_max_token_size"],
+                        help="Maximum tokens the LLM may generate per call.")
+    parser.add_argument("--llm-max-async", type=int,
+                        default=merged["llm_max_async"],
+                        help="Maximum concurrent LLM requests.")
+
+    # -- Embedding --
+    parser.add_argument("--embed-model", default=merged["embed_model"],
+                        help="Embedding model name as served by vLLM.")
+    parser.add_argument("--embed-dim", type=int, default=merged["embed_dim"],
+                        help="Output vector dimension of the embedding model.")
+    parser.add_argument("--embed-max-tokens", type=int,
+                        default=merged["embed_max_tokens"],
+                        help="Maximum input tokens the embedding model accepts.")
+    parser.add_argument("--embed-max-async", type=int,
+                        default=merged["embed_max_async"],
+                        help="Maximum concurrent embedding requests.")
+
+    # -- Graph construction --
+    parser.add_argument("--chunk-token-size", type=int,
+                        default=merged["chunk_token_size"],
+                        help="Target token size for each document chunk.")
+    parser.add_argument("--chunk-overlap-token-size", type=int,
+                        default=merged["chunk_overlap_token_size"],
+                        help="Token overlap between adjacent chunks.")
+    parser.add_argument("--entity-extract-max-gleaning", type=int,
+                        default=merged["entity_extract_max_gleaning"],
+                        help="Extra LLM re-prompts per chunk for entity extraction.")
+    parser.add_argument("--entity-summary-to-max-tokens", type=int,
+                        default=merged["entity_summary_to_max_tokens"],
+                        help="Max tokens for summarising an entity description.")
+    parser.add_argument("--enable-llm-cache", type=_parse_bool,
+                        default=merged["enable_llm_cache"],
+                        metavar="BOOL",
+                        help="Cache LLM responses to disk (true/false).")
+
+    # -- Batch --
+    parser.add_argument("--max-retries", type=int, default=merged["max_retries"],
+                        help="Insertion retry attempts before giving up.")
+
     return parser.parse_args()
+
+
+def _parse_bool(value: str) -> bool:
+    """Allow --enable-llm-cache true/false/1/0/yes/no on the CLI."""
+    if isinstance(value, bool):
+        return value
+    if value.lower() in ("true", "1", "yes"):
+        return True
+    if value.lower() in ("false", "0", "no"):
+        return False
+    raise argparse.ArgumentTypeError(f"Boolean value expected, got: {value!r}")
 
 
 def collect_markdown_files(data_dir: str) -> list:
     """Return a sorted list of all .md and .markdown files under data_dir."""
-    patterns = [
-        os.path.join(data_dir, "**", "*.md"),
-        os.path.join(data_dir, "**", "*.markdown"),
-    ]
     files = []
-    for pattern in patterns:
-        files.extend(glob.glob(pattern, recursive=True))
+    for pattern in ("**/*.md", "**/*.markdown"):
+        files.extend(glob.glob(os.path.join(data_dir, pattern), recursive=True))
     return sorted(set(files))
 
 
@@ -143,8 +230,8 @@ def build_rag(args: argparse.Namespace) -> HyperGraphRAG:
     llm_model: str = args.llm_model
     embed_model: str = args.embed_model
 
-    # vLLM exposes an OpenAI-compatible REST API.  We reuse
-    # openai_complete_if_cache by pointing it at the local server.
+    # vLLM exposes an OpenAI-compatible REST API; reuse openai_complete_if_cache
+    # by pointing it at the local server URL.
     async def vllm_llm_func(
         prompt, system_prompt=None, history_messages=[], **kwargs
     ) -> str:
@@ -159,9 +246,8 @@ def build_rag(args: argparse.Namespace) -> HyperGraphRAG:
             **kwargs,
         )
 
-    # vLLM also serves embedding models via /v1/embeddings.
-    # We call the underlying async function directly so we can supply our own
-    # EmbeddingFunc wrapper with the correct embedding_dim / max_token_size.
+    # Call the underlying async embedding function directly so we can supply
+    # a custom EmbeddingFunc with the correct dim / max_tokens for this model.
     async def vllm_embed_func(texts: list) -> np.ndarray:
         return await openai_embedding.func(
             texts,
@@ -170,8 +256,8 @@ def build_rag(args: argparse.Namespace) -> HyperGraphRAG:
             api_key="EMPTY",
         )
 
-    # concurrent_limit=0 disables EmbeddingFunc's internal semaphore;
-    # HyperGraphRAG will apply its own rate-limit via embedding_func_max_async.
+    # concurrent_limit=0 disables EmbeddingFunc's own semaphore; HyperGraphRAG
+    # applies its own rate-limit via embedding_func_max_async.
     embedding_func = EmbeddingFunc(
         embedding_dim=args.embed_dim,
         max_token_size=args.embed_max_tokens,
@@ -183,16 +269,25 @@ def build_rag(args: argparse.Namespace) -> HyperGraphRAG:
 
     return HyperGraphRAG(
         working_dir=args.working_dir,
+        # LLM
         llm_model_func=vllm_llm_func,
         llm_model_name=llm_model,
+        llm_model_max_token_size=args.llm_max_token_size,
         llm_model_max_async=args.llm_max_async,
+        # Embedding
         embedding_func=embedding_func,
         embedding_func_max_async=args.embed_max_async,
+        # Graph construction
+        chunk_token_size=args.chunk_token_size,
+        chunk_overlap_token_size=args.chunk_overlap_token_size,
+        entity_extract_max_gleaning=args.entity_extract_max_gleaning,
+        entity_summary_to_max_tokens=args.entity_summary_to_max_tokens,
+        enable_llm_cache=args.enable_llm_cache,
     )
 
 
 def insert_with_retry(rag: HyperGraphRAG, texts: list, max_retries: int) -> bool:
-    """Insert documents into the graph, retrying with exponential backoff."""
+    """Insert documents into the graph, retrying with exponential back-off."""
     for attempt in range(1, max_retries + 1):
         try:
             rag.insert(texts)
@@ -202,18 +297,13 @@ def insert_with_retry(rag: HyperGraphRAG, texts: list, max_retries: int) -> bool
             if attempt < max_retries:
                 logger.warning(
                     "Insertion attempt %d/%d failed: %s — retrying in %ds",
-                    attempt,
-                    max_retries,
-                    exc,
-                    wait,
+                    attempt, max_retries, exc, wait,
                 )
                 time.sleep(wait)
             else:
                 logger.error(
                     "Insertion attempt %d/%d failed: %s — no more retries.",
-                    attempt,
-                    max_retries,
-                    exc,
+                    attempt, max_retries, exc,
                 )
     return False
 
@@ -221,13 +311,14 @@ def insert_with_retry(rag: HyperGraphRAG, texts: list, max_retries: int) -> bool
 def main() -> None:
     args = parse_args()
 
-    # The OpenAI client requires OPENAI_API_KEY to be set even when talking to
-    # a local vLLM server that does not validate keys.
+    # The OpenAI client requires OPENAI_API_KEY even when talking to a local
+    # vLLM server that does not validate keys.
     os.environ.setdefault("OPENAI_API_KEY", "EMPTY")
 
+    logger.info("Config file    : %s", args.config)
     logger.info("vLLM base URL  : %s", args.vllm_base_url)
     logger.info("LLM model      : %s", args.llm_model or "(server default)")
-    logger.info("Embedding model: %s", args.embed_model or "(server default)")
+    logger.info("Embed model    : %s", args.embed_model or "(server default)")
     logger.info("Embed dim      : %d", args.embed_dim)
     logger.info("Data directory : %s", args.data_dir)
     logger.info("Working dir    : %s", args.working_dir)
@@ -254,7 +345,9 @@ def main() -> None:
     if success:
         logger.info("Hypergraph construction completed successfully.")
     else:
-        logger.error("Hypergraph construction failed after %d attempts.", args.max_retries)
+        logger.error(
+            "Hypergraph construction failed after %d attempts.", args.max_retries
+        )
         sys.exit(1)
 
 

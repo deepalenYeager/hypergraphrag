@@ -1,0 +1,83 @@
+# ---------------------------------------------------------------------------
+# HyperGraphRAG – batch construction configuration
+# ---------------------------------------------------------------------------
+# All settings for script_batch_construct.py live here.
+# Any value can be overridden at runtime with the corresponding CLI flag
+# (run `python script_batch_construct.py --help` for the full list).
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# I/O paths
+# ---------------------------------------------------------------------------
+paths:
+  # Directory that is scanned recursively for .md / .markdown files.
+  data_dir: ./data
+  # Directory where the hypergraph artefacts are written.
+  working_dir: ./expr/batch
+
+# ---------------------------------------------------------------------------
+# vLLM server
+# Both the LLM and the embedding model are expected to be served by the same
+# vLLM instance via its OpenAI-compatible REST API.
+# ---------------------------------------------------------------------------
+vllm:
+  base_url: http://localhost:8000/v1
+
+# ---------------------------------------------------------------------------
+# Language model
+# ---------------------------------------------------------------------------
+llm:
+  # Exact model name as registered by the running vLLM server.
+  # Example: Qwen/Qwen2.5-7B-Instruct
+  model: ""
+
+  # Hard upper bound on tokens the LLM may generate per call.
+  max_token_size: 32768
+
+  # Maximum number of LLM requests sent concurrently.
+  max_async: 4
+
+# ---------------------------------------------------------------------------
+# Embedding model
+# ---------------------------------------------------------------------------
+embedding:
+  # Exact model name as registered by the running vLLM server.
+  # Example: BAAI/bge-m3
+  model: ""
+
+  # Output vector dimensionality – must match the served model.
+  dim: 4096
+
+  # Maximum number of input tokens the embedding model accepts per call.
+  max_tokens: 8192
+
+  # Maximum number of embedding requests sent concurrently.
+  max_async: 8
+
+# ---------------------------------------------------------------------------
+# HyperGraphRAG graph-construction parameters
+# ---------------------------------------------------------------------------
+graph:
+  # Target size (in tokens) of each document chunk.
+  chunk_token_size: 1200
+
+  # Number of tokens shared between adjacent chunks.
+  chunk_overlap_token_size: 100
+
+  # How many additional LLM re-prompts are issued per chunk to extract
+  # any remaining entities or hyperedges.
+  entity_extract_max_gleaning: 2
+
+  # Maximum tokens used when summarising a single entity description.
+  entity_summary_to_max_tokens: 500
+
+  # Cache LLM responses on disk so identical prompts are never re-sent.
+  enable_llm_cache: true
+
+# ---------------------------------------------------------------------------
+# Batch-insertion behaviour
+# ---------------------------------------------------------------------------
+batch:
+  # Number of retry attempts if rag.insert() raises an exception.
+  # Each retry waits 2^attempt seconds (exponential back-off).
+  max_retries: 5
