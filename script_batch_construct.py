@@ -45,10 +45,13 @@ logger = logging.getLogger(__name__)
 _DEFAULTS = {
     "data_dir": "./data",
     "working_dir": "./expr/batch",
-    "vllm_base_url": "http://localhost:8000/v1",
+    "llm_base_url": "http://localhost:8000/v1",
+    "llm_api_key": "EMPTY",
     "llm_model": "",
     "llm_max_token_size": 32768,
     "llm_max_async": 4,
+    "embed_base_url": "http://localhost:8000/v1",
+    "embed_api_key": "EMPTY",
     "embed_model": "",
     "embed_dim": 4096,
     "embed_max_tokens": 8192,
@@ -75,7 +78,6 @@ def _load_yaml(path: str) -> dict:
         sys.exit(1)
 
     paths = raw.get("paths", {})
-    vllm = raw.get("vllm", {})
     llm = raw.get("llm", {})
     emb = raw.get("embedding", {})
     graph = raw.get("graph", {})
@@ -84,10 +86,13 @@ def _load_yaml(path: str) -> dict:
     return {
         "data_dir": paths.get("data_dir"),
         "working_dir": paths.get("working_dir"),
-        "vllm_base_url": vllm.get("base_url"),
+        "llm_base_url": llm.get("base_url"),
+        "llm_api_key": llm.get("api_key"),
         "llm_model": llm.get("model"),
         "llm_max_token_size": llm.get("max_token_size"),
         "llm_max_async": llm.get("max_async"),
+        "embed_base_url": emb.get("base_url"),
+        "embed_api_key": emb.get("api_key"),
         "embed_model": emb.get("model"),
         "embed_dim": emb.get("dim"),
         "embed_max_tokens": emb.get("max_tokens"),
@@ -137,13 +142,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--working-dir", default=merged["working_dir"],
                         help="Output directory for the hypergraph artefacts.")
 
-    # -- vLLM --
-    parser.add_argument("--vllm-base-url", default=merged["vllm_base_url"],
-                        help="Base URL of the vLLM OpenAI-compatible server.")
-
     # -- LLM --
+    parser.add_argument("--llm-base-url", default=merged["llm_base_url"],
+                        help="OpenAI-compatible endpoint for the LLM server.")
+    parser.add_argument("--llm-api-key", default=merged["llm_api_key"],
+                        help="API key for the LLM server.")
     parser.add_argument("--llm-model", default=merged["llm_model"],
-                        help="LLM model name as served by vLLM.")
+                        help="LLM model name as served by the LLM server.")
     parser.add_argument("--llm-max-token-size", type=int,
                         default=merged["llm_max_token_size"],
                         help="Maximum tokens the LLM may generate per call.")
@@ -152,8 +157,12 @@ def parse_args() -> argparse.Namespace:
                         help="Maximum concurrent LLM requests.")
 
     # -- Embedding --
+    parser.add_argument("--embed-base-url", default=merged["embed_base_url"],
+                        help="OpenAI-compatible endpoint for the embedding server.")
+    parser.add_argument("--embed-api-key", default=merged["embed_api_key"],
+                        help="API key for the embedding server.")
     parser.add_argument("--embed-model", default=merged["embed_model"],
-                        help="Embedding model name as served by vLLM.")
+                        help="Embedding model name as served by the embedding server.")
     parser.add_argument("--embed-dim", type=int, default=merged["embed_dim"],
                         help="Output vector dimension of the embedding model.")
     parser.add_argument("--embed-max-tokens", type=int,
@@ -225,13 +234,14 @@ def read_markdown_files(file_paths: list) -> list:
 
 
 def build_rag(args: argparse.Namespace) -> HyperGraphRAG:
-    """Construct a HyperGraphRAG instance wired to the local vLLM server."""
-    base_url: str = args.vllm_base_url
+    """Construct a HyperGraphRAG instance wired to the configured model servers."""
+    llm_base_url: str = args.llm_base_url
+    llm_api_key: str = args.llm_api_key
     llm_model: str = args.llm_model
+    embed_base_url: str = args.embed_base_url
+    embed_api_key: str = args.embed_api_key
     embed_model: str = args.embed_model
 
-    # vLLM exposes an OpenAI-compatible REST API; reuse openai_complete_if_cache
-    # by pointing it at the local server URL.
     async def vllm_llm_func(
         prompt, system_prompt=None, history_messages=[], **kwargs
     ) -> str:
@@ -241,8 +251,8 @@ def build_rag(args: argparse.Namespace) -> HyperGraphRAG:
             prompt,
             system_prompt=system_prompt,
             history_messages=history_messages,
-            base_url=base_url,
-            api_key="EMPTY",  # vLLM does not validate API keys
+            base_url=llm_base_url,
+            api_key=llm_api_key,
             **kwargs,
         )
 
@@ -252,8 +262,8 @@ def build_rag(args: argparse.Namespace) -> HyperGraphRAG:
         return await openai_embedding.func(
             texts,
             model=embed_model,
-            base_url=base_url,
-            api_key="EMPTY",
+            base_url=embed_base_url,
+            api_key=embed_api_key,
         )
 
     # concurrent_limit=0 disables EmbeddingFunc's own semaphore; HyperGraphRAG
@@ -311,13 +321,13 @@ def insert_with_retry(rag: HyperGraphRAG, texts: list, max_retries: int) -> bool
 def main() -> None:
     args = parse_args()
 
-    # The OpenAI client requires OPENAI_API_KEY even when talking to a local
-    # vLLM server that does not validate keys.
-    os.environ.setdefault("OPENAI_API_KEY", "EMPTY")
+    # The OpenAI client library requires OPENAI_API_KEY to be set.
+    os.environ.setdefault("OPENAI_API_KEY", args.llm_api_key)
 
     logger.info("Config file    : %s", args.config)
-    logger.info("vLLM base URL  : %s", args.vllm_base_url)
+    logger.info("LLM base URL   : %s", args.llm_base_url)
     logger.info("LLM model      : %s", args.llm_model or "(server default)")
+    logger.info("Embed base URL : %s", args.embed_base_url)
     logger.info("Embed model    : %s", args.embed_model or "(server default)")
     logger.info("Embed dim      : %d", args.embed_dim)
     logger.info("Data directory : %s", args.data_dir)
