@@ -28,3 +28,4 @@ xxhash
 jsonlines
 nltk
 PyPDF2
+PyYAML
