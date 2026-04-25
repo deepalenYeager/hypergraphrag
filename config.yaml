@@ -81,3 +81,25 @@ batch:
   # Number of retry attempts if rag.insert() raises an exception.
   # Each retry waits 2^attempt seconds (exponential back-off).
   max_retries: 5
+
+# ---------------------------------------------------------------------------
+# Query behaviour (script_query.py)
+# ---------------------------------------------------------------------------
+query:
+  # Retrieval mode: local | global | hybrid | naive
+  mode: hybrid
+
+  # Number of top-k entities / relationships to retrieve.
+  top_k: 60
+
+  # Format hint passed to the LLM for the final answer.
+  response_type: "Multiple Paragraphs"
+
+  # Maximum tokens allocated to retrieved text chunks.
+  max_token_for_text_unit: 4000
+
+  # Maximum tokens allocated to the global (hyperedge) context.
+  max_token_for_global_context: 4000
+
+  # Maximum tokens allocated to the local (entity) context.
+  max_token_for_local_context: 4000
