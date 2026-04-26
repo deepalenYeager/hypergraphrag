@@ -57,14 +57,23 @@ async def openai_complete_if_cache(
     api_key=None,
     **kwargs,
 ) -> str:
-    if api_key:
-        os.environ["OPENAI_API_KEY"] = api_key
-
-    openai_async_client = (
-        AsyncOpenAI() if base_url is None else AsyncOpenAI(base_url=base_url)
+    openai_async_client = AsyncOpenAI(
+        api_key=api_key or os.environ.get("OPENAI_API_KEY"),
+        base_url=base_url,
     )
     kwargs.pop("hashing_kv", None)
     kwargs.pop("keyword_extraction", None)
+
+    # Merge enable_thinking=False into extra_body.chat_template_kwargs if the
+    # caller requested it via a top-level kwarg, so callers don't have to
+    # construct the nested extra_body structure manually.
+    enable_thinking = kwargs.pop("enable_thinking", None)
+    if enable_thinking is not None:
+        extra_body = kwargs.get("extra_body", {})
+        chat_template_kwargs = extra_body.get("chat_template_kwargs", {})
+        chat_template_kwargs.setdefault("enable_thinking", enable_thinking)
+        extra_body["chat_template_kwargs"] = chat_template_kwargs
+        kwargs["extra_body"] = extra_body
     messages = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
